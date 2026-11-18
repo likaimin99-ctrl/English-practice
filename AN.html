@@ -421,7 +421,7 @@
                 <span style="font-weight: bold; color: var(--primary);">📊 本級別已學習單字量：</span>
                 <span id="learnedCountDisplay" style="font-size: 1.2rem; font-weight: bold;">0</span> / <span id="totalCountDisplay">0</span> 字
                 <div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 3px;">
-                    ※ 規則：每回合 10 字，測驗 15 題，答對 1 題賺 <strong>3 分鐘</strong>。正確率需達 <strong>80% 以上</strong>且選擇「<strong>所有已學過的單字</strong>」範圍才計分（指定單回合為純練習不計分），每日取最高分！
+                    ※ 規則：每回合 10 字，測驗 15 題，答對 1 題賺 <strong>3 分鐘</strong>。正確率需達 <strong>80% 以上</strong>才計分，取最高分！
                 </div>
             </div>
             <button class="btn btn-outline" onclick="resetAllData()">🗑️ 重置所有紀錄</button>
@@ -435,15 +435,15 @@
             <div class="exam-grid">
                 <button class="btn btn-warning exam-card-btn" onclick="openPracticeModal('spell')">
                     <span style="font-size: 1.05rem;">✍️ 單字拼寫練習 (15題)</span>
-                    <span class="best-score-tag" id="best-spell">今日最高：0 分鐘</span>
+                    <span class="best-score-tag" id="best-spell">本週最高：0 分鐘</span>
                 </button>
                 <button class="btn btn-accent exam-card-btn" onclick="openPracticeModal('quiz')">
                     <span style="font-size: 1.05rem;">🏆 綜合考試訓練 (15題)</span>
-                    <span class="best-score-tag" id="best-quiz">今日最高：0 分鐘</span>
+                    <span class="best-score-tag" id="best-quiz">本週最高：0 分鐘</span>
                 </button>
                 <button class="btn btn-info exam-card-btn" onclick="openPracticeModal('listening')">
                     <span style="font-size: 1.05rem;">🎧 聽力測驗訓練 (15題)</span>
-                    <span class="best-score-tag" id="best-listening">今日最高：0 分鐘</span>
+                    <span class="best-score-tag" id="best-listening">本週最高：0 分鐘</span>
                 </button>
             </div>
         </div>
@@ -1301,7 +1301,7 @@
     const wordDatabase = { starter: starterCore };
 
     // ============================================================
-    // 週期時間計算邏輯（上方維持「週」計算，下方三大主題改為「天」計算）
+    // 週期時間計算邏輯
     // ============================================================
     const MAX_WEEKLY_MINUTES = 480;
     const MINUTES_PER_CORRECT = 3;
@@ -1322,45 +1322,24 @@
         return getCurrentWeekStartTimestamp() + 7 * 24 * 60 * 60 * 1000;
     }
 
-    function getTodayDateString() {
-        const now = new Date();
-        const y = now.getFullYear();
-        const m = String(now.getMonth() + 1).padStart(2, '0');
-        const d = String(now.getDate()).padStart(2, '0');
-        return `${y}-${m}-${d}`;
-    }
-
-    function getBankMasterData() {
+    function getWeeklyBankData() {
         const currentWeekId = getCurrentWeekStartTimestamp();
-        const todayId = getTodayDateString();
-        const savedStr = localStorage.getItem('phone_time_master_v2');
+        const savedStr = localStorage.getItem('phone_time_bank_v1');
         let data = savedStr ? JSON.parse(savedStr) : null;
-
         if (!data || data.weekId !== currentWeekId) {
-            data = {
-                weekId: currentWeekId,
-                lastDate: todayId,
-                dailyBest: { spell: 0, quiz: 0, listening: 0 },
-                accumulatedEarned: 0,
-                usedMinutes: 0
-            };
-        } else if (data.lastDate !== todayId) {
-            const yesterdaySum = (data.dailyBest.spell || 0) + (data.dailyBest.quiz || 0) + (data.dailyBest.listening || 0);
-            data.accumulatedEarned = Math.min(MAX_WEEKLY_MINUTES, data.accumulatedEarned + yesterdaySum);
-            data.dailyBest = { spell: 0, quiz: 0, listening: 0 };
-            data.lastDate = todayId;
+            data = { weekId: currentWeekId, bestMinutes: { spell: 0, quiz: 0, listening: 0 }, usedMinutes: 0 };
+            localStorage.setItem('phone_time_bank_v1', JSON.stringify(data));
         }
-        localStorage.setItem('phone_time_master_v2', JSON.stringify(data));
         return data;
     }
 
-    function saveBankMasterData(data) {
-        localStorage.setItem('phone_time_master_v2', JSON.stringify(data));
+    function saveWeeklyBankData(data) {
+        localStorage.setItem('phone_time_bank_v1', JSON.stringify(data));
     }
 
     function calculateTotalEarned(data) {
-        const todaySum = (data.dailyBest.spell || 0) + (data.dailyBest.quiz || 0) + (data.dailyBest.listening || 0);
-        return Math.min(MAX_WEEKLY_MINUTES, data.accumulatedEarned + todaySum);
+        const rawSum = (data.bestMinutes.spell || 0) + (data.bestMinutes.quiz || 0) + (data.bestMinutes.listening || 0);
+        return Math.min(MAX_WEEKLY_MINUTES, rawSum);
     }
 
     function deductPhoneTime() {
@@ -1370,7 +1349,7 @@
             alert('請輸入正確的分鐘數（大於 0 的整數）！');
             return;
         }
-        const data = getBankMasterData();
+        const data = getWeeklyBankData();
         const totalEarned = calculateTotalEarned(data);
         const available = Math.max(0, totalEarned - data.usedMinutes);
         if (val > available) {
@@ -1379,27 +1358,27 @@
         }
         if (confirm(`確定要使用並扣除 ${val} 分鐘的手機時間嗎？`)) {
             data.usedMinutes += val;
-            saveBankMasterData(data);
+            saveWeeklyBankData(data);
             inputEl.value = '';
             updateTimeBankUI();
         }
     }
 
     function updateTimeBankUI() {
-        const data = getBankMasterData();
+        const data = getWeeklyBankData();
         const totalEarned = calculateTotalEarned(data);
         const available = Math.max(0, totalEarned - data.usedMinutes);
         document.getElementById('availableMinutesDisplay').innerText = available;
         document.getElementById('totalEarnedDisplay').innerText = totalEarned;
         document.getElementById('totalUsedDisplay').innerText = data.usedMinutes;
-        document.getElementById('best-spell').innerText = `今日最高：${data.dailyBest.spell} 分鐘`;
-        document.getElementById('best-quiz').innerText = `今日最高：${data.dailyBest.quiz} 分鐘`;
-        document.getElementById('best-listening').innerText = `今日最高：${data.dailyBest.listening} 分鐘`;
+        document.getElementById('best-spell').innerText = `本週最高：${data.bestMinutes.spell} 分鐘`;
+        document.getElementById('best-quiz').innerText = `本週最高：${data.bestMinutes.quiz} 分鐘`;
+        document.getElementById('best-listening').innerText = `本週最高：${data.bestMinutes.listening} 分鐘`;
     }
 
     function startWeeklyCountdownTimer() {
         function tick() {
-            const data = getBankMasterData();
+            const data = getWeeklyBankData();
             const now = Date.now();
             const nextMonday = getNextWeekStartTimestamp();
             const diffMs = Math.max(0, nextMonday - now);
@@ -1414,9 +1393,6 @@
             document.getElementById('availableMinutesDisplay').innerText = available;
             document.getElementById('totalEarnedDisplay').innerText = totalEarned;
             document.getElementById('totalUsedDisplay').innerText = data.usedMinutes;
-            document.getElementById('best-spell').innerText = `今日最高：${data.dailyBest.spell} 分鐘`;
-            document.getElementById('best-quiz').innerText = `今日最高：${data.dailyBest.quiz} 分鐘`;
-            document.getElementById('best-listening').innerText = `今日最高：${data.dailyBest.listening} 分鐘`;
         }
         tick();
         setInterval(tick, 1000);
@@ -1468,7 +1444,6 @@
     let currentIndex = 0;
     let correctCount = 0;
     let pendingPracticeMode = '';
-    let currentPracticeScope = 'all';
     let isAnswerLocked = false;
     let questionTimer = null;
     let questionTimeLeft = 0;
@@ -1548,7 +1523,6 @@
             localStorage.removeItem(`learned_v2_${currentStage}`);
             localStorage.removeItem(`mistakes_v1_${currentStage}`);
             localStorage.removeItem('phone_time_bank_v1');
-            localStorage.removeItem('phone_time_master_v2');
             updateTimeBankUI();
             renderMenu();
         }
@@ -1618,9 +1592,9 @@
         const totalWords = wordDatabase[currentStage].length;
         const totalRounds = Math.ceil(totalWords / ROUND_SIZE);
         const roundSelect = document.getElementById('modalRoundSelect');
-        roundSelect.innerHTML = `<option value="all">⭐ 從「所有已學過的單字」中出滿 15 題（計分模式）</option>`;
+        roundSelect.innerHTML = `<option value="all">⭐ 從「所有已學過的單字」中出滿 15 題</option>`;
         for (let r = 0; r < totalRounds; r++) {
-            roundSelect.innerHTML += `<option value="${r}">第 ${r + 1} 回合 (指定 ${Math.min(ROUND_SIZE, totalWords - r*ROUND_SIZE)} 字・純練習不計分)</option>`;
+            roundSelect.innerHTML += `<option value="${r}">第 ${r + 1} 回合 (指定 ${Math.min(ROUND_SIZE, totalWords - r*ROUND_SIZE)} 字)</option>`;
         }
         document.getElementById('practiceModal').style.display = 'flex';
     }
@@ -1638,7 +1612,6 @@
             return;
         }
         currentMode = pendingPracticeMode;
-        currentPracticeScope = roundVal;
         const allWords = wordDatabase[currentStage];
         let pool = [];
         if (roundVal === 'all') {
@@ -1673,8 +1646,7 @@
             'quiz': '🏆 綜合考試訓練 (15題)',
             'listening': '🎧 聽力測驗訓練 (15題)'
         };
-        const scopeBadge = currentPracticeScope === 'all' ? '【計分】' : '【純練習・不計分】';
-        document.getElementById('modeTitleDisplay').innerText = modeTitles[currentMode] + ' ' + scopeBadge;
+        document.getElementById('modeTitleDisplay').innerText = modeTitles[currentMode];
         hideAllSections();
         document.getElementById('gameArea').style.display = 'block';
         loadStep();
@@ -1928,21 +1900,12 @@
             return;
         }
         const isPassed = accuracy >= PASS_THRESHOLD;
-        const isScoringMode = (currentPracticeScope === 'all');
-        const earnedThisRun = (isScoringMode && isPassed) ? (correctCount * MINUTES_PER_CORRECT) : 0;
-        const bankData = getBankMasterData();
-        const prevBest = bankData.dailyBest[currentMode] || 0;
+        const earnedThisRun = isPassed ? (correctCount * MINUTES_PER_CORRECT) : 0;
+        const bankData = getWeeklyBankData();
+        const prevBest = bankData.bestMinutes[currentMode] || 0;
         let recordStatusHtml = '';
         const passCountNeeded = Math.ceil(totalQuestions * PASS_THRESHOLD);
-        if (!isScoringMode) {
-            const roundNum = parseInt(currentPracticeScope) + 1;
-            recordStatusHtml = `
-                <div style="background: #fef3c7; color: #92400e; padding: 15px; border-radius: 10px; margin: 15px 0; font-weight: bold;">
-                    📝 本次為「第 ${roundNum} 回合」單回合練習，不計算與累積手機時間！<br>
-                    <span style="font-size: 0.9rem; font-weight: normal;">若要賺取手機時間，請在測驗範圍選擇「⭐ 從所有已學過的單字中出滿 15 題」喔！</span>
-                </div>
-            `;
-        } else if (!isPassed) {
+        if (!isPassed) {
             recordStatusHtml = `
                 <div style="background: #fee2e2; color: var(--danger); padding: 15px; border-radius: 10px; margin: 15px 0; font-weight: bold;">
                     ⚠️ 正確率為 ${accuracyPercent}%（未達 80% 及格門檻），本次得分歸零！<br>
@@ -1951,24 +1914,24 @@
             `;
         } else {
             if (earnedThisRun > prevBest) {
-                bankData.dailyBest[currentMode] = earnedThisRun;
-                saveBankMasterData(bankData);
+                bankData.bestMinutes[currentMode] = earnedThisRun;
+                saveWeeklyBankData(bankData);
                 recordStatusHtml = `
                     <div style="background: #d1fae5; color: #065f46; padding: 15px; border-radius: 10px; margin: 15px 0; font-weight: bold;">
-                        🎊 恭喜突破本主題今日最高紀錄！<br>
-                        本次獲得 <strong>${earnedThisRun} 分鐘</strong>（已更新為今日最高分，取代原本的 ${prevBest} 分鐘）
+                        🎊 恭喜突破本主題最高紀錄！<br>
+                        本次獲得 <strong>${earnedThisRun} 分鐘</strong>（已更新為本主題最高分，取代原本的 ${prevBest} 分鐘）
                     </div>
                 `;
             } else {
                 recordStatusHtml = `
                     <div style="background: #eef2ff; color: var(--primary); padding: 15px; border-radius: 10px; margin: 15px 0; font-weight: bold;">
                         ✅ 順利過關！本次得分為 <strong>${earnedThisRun} 分鐘</strong><br>
-                        <span style="font-size: 0.9rem; font-weight: normal;">（本主題已採計您的今日最高紀錄：<strong>${prevBest} 分鐘</strong>）</span>
+                        <span style="font-size: 0.9rem; font-weight: normal;">（本主題已採計您的本週最高紀錄：<strong>${prevBest} 分鐘</strong>）</span>
                     </div>
                 `;
             }
         }
-        const updatedBank = getBankMasterData();
+        const updatedBank = getWeeklyBankData();
         const totalEarned = calculateTotalEarned(updatedBank);
         const available = Math.max(0, totalEarned - updatedBank.usedMinutes);
         box.innerHTML = `
